@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
+<base target="_top">
 <meta name="robots" content="noindex">
 <meta charset="utf-8">
 <style>
@@ -162,8 +163,8 @@ const STATIONS = [
   { k:'여수', info:'위도 34°45′N · 경도 127°46′E (남해)' },
   { k:'속초', info:'위도 38°12′N · 경도 128°36′E (동해)' }
 ];
-const MODE = 'web';
-const ENDPOINT = 'https://script.google.com/macros/s/여기에_배포ID/exec';   // 깃허브용: '모든 사용자' 배포의 웹 앱 URL (…/exec)
+const MODE = 'gas';
+const ENDPOINT = '';   // 깃허브용: '모든 사용자' 배포의 웹 앱 URL (…/exec)
 const TYPES = ['반일주조', '일주조', '혼합조'];
 const PHASES = ['삭(신월)', '상현', '망(보름)', '하현'];
 const SHOW_LUNAR = true;   // 표에 음력 날짜 표시
@@ -443,10 +444,14 @@ function send(a) {
     if (!(window.google && google.script && google.script.run)) return Promise.reject(new Error('Apps Script 연결 없음'));
     return new Promise((res, rej) => google.script.run.withSuccessHandler(res).withFailureHandler(rej).submitAnswer(a));
   }
-  if (!/^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec$/.test(ENDPOINT)) return Promise.reject(new Error('제출 주소(ENDPOINT)가 설정되지 않았습니다'));
+  // 학교 도메인 주소(/a/macros/도메인/s/ID/exec)도 일반 주소(/macros/s/ID/exec)로 바꿔서 보냄
+  const m = /^https:\/\/script\.google\.com\/(?:a\/macros\/[^/]+|macros)\/s\/([^/?#]+)\/exec/.exec(ENDPOINT.trim());
+  if (!m) return Promise.reject(new Error('제출 주소(ENDPOINT)가 설정되지 않았습니다'));
+  const url = 'https://script.google.com/macros/s/' + m[1] + '/exec';
   const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), 45000);
-  return fetch(ENDPOINT, { method: 'POST', body: JSON.stringify(a), signal: ctl.signal })   // text/plain 으로 보내 사전 요청(CORS) 없이 전송
-    .then(r => r.json())
+  return fetch(url, { method: 'POST', body: JSON.stringify(a), signal: ctl.signal })   // text/plain 으로 보내 사전 요청(CORS) 없이 전송
+    .then(r => r.text())
+    .then(t => { try { return JSON.parse(t); } catch (e) { throw new Error('제출 서버가 답안을 받지 못함(웹 앱 액세스가 \'모든 사용자\'인지 확인)'); } })
     .then(r => { clearTimeout(timer); if (!r.ok) throw new Error(r.error || '저장 실패'); return r; })
     .catch(e => { clearTimeout(timer); throw (e.name === 'AbortError' ? new Error('응답 시간 초과') : e instanceof TypeError ? new Error('제출 서버에 연결할 수 없음') : e); });
 }
